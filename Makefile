@@ -1,4 +1,4 @@
-.PHONY: setup run build clean lint test
+.PHONY: setup run build build-all clean lint test
 
 VENV       := .venv
 ARGS       ?=
@@ -30,7 +30,17 @@ build:
 		--onefile \
 		--name h1tool \
 		--clean \
+		--noconfirm \
 		h1tool/__main__.py
+	@echo ""
+	@echo "✓ Binary: dist/h1tool"
+	@ls -lh dist/h1tool*
+
+tag:
+	@read -p "Tag (e.g. v2.0.0): " tag; \
+	git tag -a $$tag -m "Release $$tag"; \
+	git push origin $$tag; \
+	echo "✓ Tag $$tag pushed. GitHub Actions will build & release."
 
 lint:
 	$(PYTHON) -m ruff check h1tool/
