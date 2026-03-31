@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "h1tool"
+version = "2.0.0"
+description = "Universal media Swiss Army knife. Download & convert video/audio/images."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "Heysh1n" }]
+keywords = ["downloader", "converter", "yt-dlp", "media", "cli"]
+
+dependencies = [
+    "yt-dlp>=2024.0",
+    "ffmpeg-python>=0.2",
+    "typer[all]>=0.12",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+spotify = ["spotdl>=4.0"]
+dev = [
+    "pyinstaller>=6.0",
+    "ruff",
+    "pytest",
+]
+all = ["h1tool[spotify,dev]"]
+
+[project.scripts]
+h1tool = "h1tool.main:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["h1tool"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501", "W292"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
