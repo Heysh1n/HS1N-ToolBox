@@ -46,11 +46,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Устанавливаем FFmpeg для тестов
       - name: Setup FFmpeg
         uses: FedericoCarboni/setup-ffmpeg@v3
         with:
           architecture: x64
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install dependencies
         run: |
