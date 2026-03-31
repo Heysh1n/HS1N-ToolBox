@@ -1,0 +1,146 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v2.0.0)"
+        required: true
+        default: "v2.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build — ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: Linux
+            artifact: h1tool-linux-amd64
+            binary: dist/h1tool
+          - os: windows-latest
+            name: Windows
+            artifact: h1tool-windows-amd64.exe
+            binary: dist/h1tool.exe
+          - os: macos-latest
+            name: macOS-arm64
+            artifact: h1tool-macos-arm64
+            binary: dist/h1tool
+          - os: macos-13
+            name: macOS-amd64
+            artifact: h1tool-macos-amd64
+            binary: dist/h1tool
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+      - name: Build binary
+        run: |
+          python -m PyInstaller \
+            --onefile \
+            --name h1tool \
+            --clean \
+            --noconfirm \
+            --add-data "h1tool:h1tool" \
+            h1tool/__main__.py
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            mv dist/h1tool.exe "dist/${{ matrix.artifact }}"
+          else
+            mv dist/h1tool "dist/${{ matrix.artifact }}"
+            chmod +x "dist/${{ matrix.artifact }}"
+          fi
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          ./dist/${{ matrix.artifact }} --version || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: List artifacts
+        run: find artifacts/ -type f | head -20
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          find . -type f -name "h1tool-*" -exec sha256sum {} \; | sort > ../checksums.txt
+          cat ../checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || github.event.inputs.tag }}
+          name: "HS1N-Toolbox ${{ github.ref_name || github.event.inputs.tag }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## 📦 Installation
+
+            Download the binary for your platform below. No Python required.
+
+            | Platform | Binary | 
+            |----------|--------|
+            | 🐧 Linux (x64) | `h1tool-linux-amd64` |
+            | 🪟 Windows (x64) | `h1tool-windows-amd64.exe` |
+            | 🍎 macOS (Apple Silicon) | `h1tool-macos-arm64` |
+            | 🍎 macOS (Intel) | `h1tool-macos-amd64` |
+
+            ### Quick start
+            ```bash
+            chmod +x h1tool-linux-amd64  # Linux/macOS only
+            ./h1tool-linux-amd64 --help
+            ./h1tool-linux-amd64 download -u "https://youtube.com/watch?v=..."
+            ```
+
+            ### Requirements
+            - **ffmpeg** in PATH (for conversion & audio extraction)
+            - **spotdl** (optional, for Spotify)
+
+            ### Checksums (SHA-256)
+            ```
+            See checksums.txt attached below
+            ```
+          files: |
+            artifacts/**/*
+            checksums.txt
