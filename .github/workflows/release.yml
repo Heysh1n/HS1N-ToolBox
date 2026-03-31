@@ -25,19 +25,19 @@ jobs:
           - os: ubuntu-latest
             name: Linux
             artifact: h1tool-linux-amd64
-            binary: dist/h1tool
+            sep: ":"  # Разделитель для PyInstaller на Unix
           - os: windows-latest
             name: Windows
             artifact: h1tool-windows-amd64.exe
-            binary: dist/h1tool.exe
+            sep: ";"  # Разделитель для PyInstaller на Windows
           - os: macos-latest
             name: macOS-arm64
             artifact: h1tool-macos-arm64
-            binary: dist/h1tool
+            sep: ":"
           - os: macos-13
             name: macOS-amd64
             artifact: h1tool-macos-amd64
-            binary: dist/h1tool
+            sep: ":"
 
     steps:
       - uses: actions/checkout@v4
@@ -46,22 +46,34 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Устанавливаем FFmpeg для тестов
+      - name: Setup FFmpeg
+        uses: FedericoCarboni/setup-ffmpeg@v3
+        with:
+          architecture: x64
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
       - name: Run tests
-        run: pytest tests/ -v --tb=short
+        # Отключаем цвета для успешного прохождения assert
+        env:
+          NO_COLOR: "1"
+          TERM: "dumb"
+          PY_COLORS: "0"
+        run: python -m pytest tests/ -v --tb=short
 
       - name: Build binary
+        shell: bash # Принудительно используем bash, чтобы работали переносы строк (\) на Windows
         run: |
           python -m PyInstaller \
             --onefile \
             --name h1tool \
             --clean \
             --noconfirm \
-            --add-data "h1tool:h1tool" \
+            --add-data "h1tool${{ matrix.sep }}h1tool" \
             h1tool/__main__.py
 
       - name: Rename artifact
@@ -96,6 +108,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts/
+          merge-multiple: true  # Важно: скачивает все файлы в одну папку, без подпапок
 
       - name: List artifacts
         run: find artifacts/ -type f | head -20
@@ -103,7 +116,8 @@ jobs:
       - name: Generate checksums
         run: |
           cd artifacts
-          find . -type f -name "h1tool-*" -exec sha256sum {} \; | sort > ../checksums.txt
+          # Генерируем чистые SHA256 суммы только для самих файлов
+          find . -type f -name "h1tool-*" -exec sha256sum {} \; | sed 's|./||' | sort > ../checksums.txt
           cat ../checksums.txt
 
       - name: Create Release
@@ -142,5 +156,5 @@ jobs:
             See checksums.txt attached below
             ```
           files: |
-            artifacts/**/*
+            artifacts/*
             checksums.txt
